@@ -40,7 +40,7 @@ if (uart.init() == IUart::Status::OK) {
     // UART is ready to use
 }
 ```
-
+NOTE: A queue should be of sufficient size and should hold *uint8_t* type.
 ---
 
 ### 2. Transmitting Data
