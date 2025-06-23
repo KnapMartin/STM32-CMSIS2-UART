@@ -14,64 +14,64 @@ Uart::~Uart()
 {
 }
 
-IUart::Status Uart::init()
+Uart::Status Uart::init()
 {
     if (m_huart == nullptr)
     {
-        return IUart::Status::ERROR; // UART handle is not initialized
+        return Uart::Status::ERROR; // UART handle is not initialized
     }
     if (m_semTx == nullptr || m_queueRx == nullptr || m_mutexTx == nullptr)
     {
-        return IUart::Status::ERROR; // Semaphore, queue, or mutex not initialized
+        return Uart::Status::ERROR; // Semaphore, queue, or mutex not initialized
     }
 
     if (HAL_UART_Receive_IT(m_huart, const_cast<uint8_t *>(&m_rxChar), 1) != HAL_OK)
     {
-        return IUart::Status::ERROR; // Failed to start UART reception
+        return Uart::Status::ERROR; // Failed to start UART reception
     }
 
     m_isInitialized = true; // Mark UART as initialized
 
-    return IUart::Status::OK; // Initialization successful
+    return Uart::Status::OK; // Initialization successful
 }
 
-IUart::Status Uart::transmit(const char *data, const std::size_t len)
+Uart::Status Uart::transmit(const char *data, const std::size_t len)
 {
     if (data == nullptr || len == 0)
     {
-        return IUart::Status::NONE; // No data to transmit
+        return Uart::Status::NONE; // No data to transmit
     }
 
     if (osMutexAcquire(*m_mutexTx, osWaitForever) != osOK)
     {
-        return IUart::Status::ERROR; // Failed to acquire mutex
+        return Uart::Status::ERROR; // Failed to acquire mutex
     }
 
     if (HAL_UART_Transmit_IT(m_huart, reinterpret_cast<uint8_t *>(const_cast<char *>(data)), len) != HAL_OK)
     {
         osMutexRelease(*m_mutexTx);
-        return IUart::Status::ERROR; // Transmission failed
+        return Uart::Status::ERROR; // Transmission failed
     }
 
     if (osSemaphoreAcquire(*m_semTx, osWaitForever) != osOK)
     {
         osMutexRelease(*m_mutexTx);
-        return IUart::Status::ERROR; // Timeout or failed to acquire semaphore
+        return Uart::Status::ERROR; // Timeout or failed to acquire semaphore
     }
 
     if (osMutexRelease(*m_mutexTx) != osOK)
     {
-        return IUart::Status::ERROR; // Failed to release mutex
+        return Uart::Status::ERROR; // Failed to release mutex
     }
 
-    return IUart::Status::OK; // Transmission successful
+    return Uart::Status::OK; // Transmission successful
 }
 
-IUart::Status Uart::receive(char *data)
+Uart::Status Uart::receive(char *data)
 {
     if (data == nullptr)
     {
-        return IUart::Status::NONE; // No data to receive
+        return Uart::Status::NONE; // No data to receive
     }
 
     char rxChar;
@@ -82,7 +82,7 @@ IUart::Status Uart::receive(char *data)
     {
         if (osMessageQueueGet(*m_queueRx, &rxChar, nullptr, osWaitForever) != osOK)
         {
-            return IUart::Status::ERROR; // Timeout or failed to receive data
+            return Uart::Status::ERROR; // Timeout or failed to receive data
         }
 
         if (rxChar == '\n' || rxChar == '\r') // End of line
@@ -91,17 +91,17 @@ IUart::Status Uart::receive(char *data)
             memcpy(data, recBuffer, rxIdx + 1); // Copy the received data to the output buffer
             if (osMessageQueueReset(*m_queueRx) != osOK)
             {
-                return IUart::Status::ERROR; // Failed to reset the message queue
+                return Uart::Status::ERROR; // Failed to reset the message queue
             }
             break; // Exit the loop on end of line character
         }
         recBuffer[rxIdx++] = rxChar;
     }
 
-    return IUart::Status::OK; // Reception successful
+    return Uart::Status::OK; // Reception successful
 }
 
-IUart::Status Uart::handleRxInterrupt(UART_HandleTypeDef *huart)
+Uart::Status Uart::handleRxInterrupt(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == m_huart->Instance)
     {
@@ -111,30 +111,30 @@ IUart::Status Uart::handleRxInterrupt(UART_HandleTypeDef *huart)
             // Send the received character to the message queue
             if (osMessageQueuePut(*m_queueRx, (const void *)&m_rxChar, 0, 0) != osOK)
             {
-                return IUart::Status::ERROR;
+                return Uart::Status::ERROR;
             }
         }
 
         // Re-enable UART reception interrupt
         if (HAL_UART_Receive_IT(m_huart, const_cast<uint8_t *>(&m_rxChar), 1) != HAL_OK)
         {
-            return IUart::Status::ERROR;
+            return Uart::Status::ERROR;
         }
     }
 
-    return IUart::Status::OK;
+    return Uart::Status::OK;
 }
 
-IUart::Status Uart::handleTxInterrupt(UART_HandleTypeDef *huart)
+Uart::Status Uart::handleTxInterrupt(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == m_huart->Instance)
     {
         // Transmission complete, release the semaphore
         if (osSemaphoreRelease(*m_semTx) != osOK)
         {
-            return IUart::Status::ERROR;
+            return Uart::Status::ERROR;
         }
     }
 
-    return IUart::Status::OK;
+    return Uart::Status::OK;
 }
